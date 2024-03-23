@@ -3,16 +3,23 @@ import pickle
 from datetime import datetime
 
 import torch
+from braindecode.models import EEGNetv4
+from mne.decoding import CSP
 from moabb.datasets import PhysionetMI
 from moabb.paradigms import MotorImagery
+from pyriemann.classification import MDM
+from pyriemann.estimation import Covariances
+from pyriemann.tangentspace import TangentSpace
 from sklearn import preprocessing
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import FunctionTransformer
+from sklearn.svm import SVC
 
-from EEGClassificator.NetworkArchitectures import TransformerClassifier
+from EEGClassificator.NetworkArchitectures import TransformerClassifier, LSTMBasedArchitecture
 
 
 class NeuralNetTransformer(TransformerMixin, BaseEstimator):
@@ -98,25 +105,22 @@ def main():
 
     paradigm = MotorImagery(channels=ALL_EEG_CHANNELS, events=['left_hand', 'right_hand', 'feet'],
         n_classes=OUTPUT_CLASSES, fmin=0.5, fmax=40, tmin=0, tmax=SECOND_DURATION, resample=SAMPLE_RATE, )
-    """
+
     eegnetv4model = NeuralNetTransformer(EEGNetv4, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
                                          n_times=int(SAMPLE_RATE * SECOND_DURATION))
     lstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
                                         n_times=int(SAMPLE_RATE * SECOND_DURATION))
-    """
     transformermodel = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
                                             n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION))
 
     pipelines = dict()
-    """
-    pipelines["csp+lda"] = make_pipeline(CSP(n_components=8), LDA())
+    pipelines["csp+lda"] = make_pipeline(CSP(n_components=8), LinearDiscriminantAnalysis())
     pipelines["tgsp+svm"] = make_pipeline(Covariances("oas"), TangentSpace(metric="riemann"), SVC(kernel="linear"))
     pipelines["MDM"] = make_pipeline(Covariances("oas"), MDM(metric="riemann"))
     pipelines["EEGNetV4"] = Pipeline([('eeg_net', eegnetv4model), ('flatten', FunctionTransformer(flatten_batched)),
         ('logistic_regression', LogisticRegression())])
     pipelines["LSTMNet"] = Pipeline([('lstm_net', lstmnetmodel), ('flatten', FunctionTransformer(flatten_batched)),
         ('logistic_regression', LogisticRegression())])
-    """
     pipelines["TransformerNet"] = Pipeline(
         [('transformer_net', transformermodel), ('flatten', FunctionTransformer(flatten_batched)),
             ('logistic_regression', LogisticRegression())])
