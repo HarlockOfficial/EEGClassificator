@@ -19,11 +19,12 @@ from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.svm import SVC
 
-from EEGClassificator.NetworkArchitectures import TransformerClassifier, LSTMBasedArchitecture
+import EEGClassificator.utils
+from EEGClassificator.NetworkArchitectures import TransformerClassifier, LSTMBasedArchitecture, MLPArchitecture
 
 
 class NeuralNetTransformer(TransformerMixin, BaseEstimator):
-    def __init__(self, model, optimizer=None, loss_fn=None, **kwargs):
+    def __init__(self, model, optimizer=None, loss_fn=None, train_step=1000, **kwargs):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if str(type(model)) == "<class 'docstring_inheritance.NumpyDocstringInheritanceInitMeta'>":
             self.model = model(**kwargs)
@@ -37,6 +38,7 @@ class NeuralNetTransformer(TransformerMixin, BaseEstimator):
             self.model = model
             self.optimizer = optimizer
             self.loss_fn = loss_fn
+        self.train_step = train_step
         self.model.to(self.device)
         self.__getattr__ = self.getattr__
     def fit(self, X, y=None):
@@ -48,12 +50,15 @@ class NeuralNetTransformer(TransformerMixin, BaseEstimator):
         targets = le.fit_transform(y.tolist())
         y = torch.as_tensor(targets, device=self.device, dtype=torch.long)
 
-        self.optimizer.zero_grad(True)
-        out = self.model(X)
-        loss = self.loss_fn(out, y)
-        loss.backward()
-        self.optimizer.step()
-
+        for step in range(self.train_step):
+            print(f"Step {step+1} of {self.train_step}", flush=True)
+            start_time = datetime.now()
+            out = self.model(X)
+            loss = self.loss_fn(out, y)
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+            print(f"Loss: {loss} Run Time: {datetime.now() - start_time}", flush=True)
         return self
 
     def transform(self, X):
@@ -106,24 +111,41 @@ def main():
     paradigm = MotorImagery(channels=ALL_EEG_CHANNELS, events=['left_hand', 'right_hand', 'feet'],
         n_classes=OUTPUT_CLASSES, fmin=0.5, fmax=40, tmin=0, tmax=SECOND_DURATION, resample=SAMPLE_RATE, )
 
-    eegnetv4model = NeuralNetTransformer(EEGNetv4, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+    eegnetv4model_for_pipe = NeuralNetTransformer(EEGNetv4, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
                                          n_times=int(SAMPLE_RATE * SECOND_DURATION))
-    lstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+    eegnetv4model = NeuralNetTransformer(EEGNetv4, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+                                            n_times=int(SAMPLE_RATE * SECOND_DURATION))
+    lstmnetmodel_for_pipe = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
                                         n_times=int(SAMPLE_RATE * SECOND_DURATION))
+    lstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+                                            n_times=int(SAMPLE_RATE * SECOND_DURATION))
+    transformermodel_for_pipe = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
+                                            n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
     transformermodel = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
-                                            n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION))
+                                            n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
+    print("Warning: Overriding Num Layers in TransformerClassifier to 2", flush=True)
+
+    mlpnetmodel_for_pipe = NeuralNetTransformer(MLPArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+                                          n_times=int(SAMPLE_RATE * SECOND_DURATION))
+    mlpnetmodel = NeuralNetTransformer(MLPArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+                                            n_times=int(SAMPLE_RATE * SECOND_DURATION))
 
     pipelines = dict()
     pipelines["csp+lda"] = make_pipeline(CSP(n_components=8), LinearDiscriminantAnalysis())
     pipelines["tgsp+svm"] = make_pipeline(Covariances("oas"), TangentSpace(metric="riemann"), SVC(kernel="linear"))
     pipelines["MDM"] = make_pipeline(Covariances("oas"), MDM(metric="riemann"))
-    pipelines["EEGNetV4"] = Pipeline([('eeg_net', eegnetv4model), ('flatten', FunctionTransformer(flatten_batched)),
+    pipelines["MLPNetPipe"] = Pipeline([('mlp_net', mlpnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
         ('logistic_regression', LogisticRegression())])
-    pipelines["LSTMNet"] = Pipeline([('lstm_net', lstmnetmodel), ('flatten', FunctionTransformer(flatten_batched)),
+    pipelines["MLPNet"] = Pipeline([('mlp_net', mlpnetmodel), ('logistic_regression', LogisticRegression())])
+    pipelines["EEGNetV4Pipe"] = Pipeline([('eeg_net', eegnetv4model_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
         ('logistic_regression', LogisticRegression())])
-    pipelines["TransformerNet"] = Pipeline(
-        [('transformer_net', transformermodel), ('flatten', FunctionTransformer(flatten_batched)),
+    pipelines["EEGNetV4"] = Pipeline([('eeg_net', eegnetv4model), ('logistic_regression', LogisticRegression())])
+    pipelines["LSTMNetPipe"] = Pipeline([('lstm_net', lstmnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
+        ('logistic_regression', LogisticRegression())])
+    pipelines["LSTMNet"] = Pipeline([('lstm_net', lstmnetmodel), ('logistic_regression', LogisticRegression())])
+    pipelines["TransformerNetPipe"] = Pipeline([('transformer_net', transformermodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
             ('logistic_regression', LogisticRegression())])
+    pipelines["TransformerNet"] = Pipeline([('transformer_net', transformermodel), ('logistic_regression', LogisticRegression())])
 
     # This commented code was used to determine the suitable dataset, that have been hardcoded in the datasets list
     """
@@ -198,6 +220,7 @@ def main():
     )
     """
     x, y, tmp = paradigm.get_data(datasets)
+    y = EEGClassificator.utils.to_categorical(y)
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, shuffle=False)
     del paradigm
     del datasets
@@ -205,10 +228,10 @@ def main():
     del y
     del tmp
     for key, pipe in pipelines.items():
-        print("Fitting Pipeline:", key)
+        print("Fitting Pipeline:", key, flush=True)
         pipe.fit(x_train, y_train)
         score = pipe.score(x_test, y_test)
-        print("Scoring Pipeline:", key, "result:", score)
+        print("Scoring Pipeline:", key, "result:", score, flush=True)
         if not os.path.exists('models/' + curr_datetime_to_string):
             os.makedirs('models/' + curr_datetime_to_string)
         with open('models/' + curr_datetime_to_string + '/' + key + '_' + str(score) + '.pkl', 'wb') as f:

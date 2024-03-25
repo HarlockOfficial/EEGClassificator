@@ -1,11 +1,24 @@
 # Copying networks from:
 # - https://www.nature.com/articles/s41598-023-41653-w#Sec3
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from braindecode.models import EEGModuleMixin
 from braindecode.models.base import deprecated_args
 from einops.layers.torch import Rearrange
-from torch import nn
 from torchviz import make_dot
 
+
+def lambda_fn(x):
+    return x[:, -1, :]
+
+class LambdaLayer(nn.Module):
+    def __init__(self, lambda_fn):
+        super(LambdaLayer, self).__init__()
+        self.lambda_fn = lambda_fn
+
+    def forward(self, x):
+        return self.lambda_fn(x)
 
 class LSTMBasedArchitecture(EEGModuleMixin, nn.Sequential):
     """
@@ -49,16 +62,16 @@ class LSTMBasedArchitecture(EEGModuleMixin, nn.Sequential):
         self.add_module('input', nn.Linear(self.n_chans, 100))
         self.add_module('lstm1', nn.LSTM(100, 100, batch_first=True, dropout=0.2))
         self.add_module('lstm2', nn.LSTM(100, 50, batch_first=True, dropout=0.2))
+        self.add_module('lambda_fn', LambdaLayer(lambda_fn))
         self.add_module('output', nn.Linear(50, self.n_outputs))
         self.add_module('softmax', nn.Softmax(dim=1))
-        self.add_module('invert_reorder', Rearrange("batch times channels -> batch channels times"))
 
     def forward(self, x):
         x = self.reorder(x)
         x = self.input(x)
         x, _ = self.lstm1(x)
         x, _ = self.lstm2(x)
-        x = x[:, -1, :]
+        x = self.lambda_fn(x)
         x = self.output(x)
         x = self.softmax(x)
         return x
@@ -109,11 +122,6 @@ class TransformerBasedArchitecture(EEGModuleMixin, nn.Module):
         x = self.invert_reorder(x)
         x = self.softmax(x)
         return x
-
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 
 class PositionalEncoding(nn.Module):
@@ -199,3 +207,26 @@ class TransformerClassifier(EEGModuleMixin, nn.Module):
         dot = make_dot(y, params=dict(self.named_parameters()))
         dot.format = 'png'
         dot.render("transformer_classifier", cleanup=True)
+
+
+class MLPArchitecture(EEGModuleMixin, nn.Sequential):
+    def __init__(self, n_chans=None, n_outputs=None, n_times=None, chs_info=None, input_window_seconds=None, sfreq=None,
+                 in_chans=None, n_classes=None, input_window_samples=None, num_layers=10):
+        n_chans, n_outputs, n_times = deprecated_args(self, ("in_chans", "n_chans", in_chans, n_chans),
+                                                      ("n_classes", "n_outputs", n_classes, n_outputs), (
+                                                          "input_window_samples", "n_times", input_window_samples,
+                                                          n_times), )
+        super().__init__(n_outputs=n_outputs, n_chans=n_chans, chs_info=chs_info, n_times=n_times,
+                         input_window_seconds=input_window_seconds, sfreq=sfreq, )
+        del n_outputs, n_chans, chs_info, n_times, input_window_seconds, sfreq
+        del in_chans, n_classes, input_window_samples
+
+        self.add_module('reorder', Rearrange("batch channels times -> batch times channels"))
+        self.add_module('input', nn.Linear(self.n_chans, 100))
+        self.add_module('relu', nn.ReLU())
+        for i in range(num_layers):
+            self.add_module(f'hidden_{i}', nn.Linear(100, 100))
+            self.add_module(f'relu_{i}', nn.ReLU())
+        self.add_module('lambda_fn', LambdaLayer(lambda_fn))
+        self.add_module('output', nn.Linear(100, self.n_outputs))
+        self.add_module('softmax', nn.Softmax(dim=1))
