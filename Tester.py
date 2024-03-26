@@ -25,7 +25,12 @@ def create_confusion_matrix(network, dataset_by_label):
     return confusion_matrix, percentage_confusion_matrix
 
 def compute_confusion_matrix(dataset_by_label, path_to_network):
-    if path_to_network.endswith('/*'):
+    if path_to_network is list:
+        for file in path_to_network:
+            print(f"Recursively running compute confusion matrix for {file}")
+            compute_confusion_matrix(dataset_by_label, file)
+        return
+    elif path_to_network.endswith('/*'):
         # enumerate all files in folder and run main for each file
         for file in os.listdir(path_to_network[:-1]):
             print(f"Recursively running compute confusion matrix for {file}")
@@ -50,5 +55,8 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("Usage: python Tester.py <path to network>")
         sys.exit(1)
-    net_path = sys.argv[1]
+    if len(sys.argv) > 2:
+        net_path = sys.argv[1:]
+    else:
+        net_path = sys.argv[1]
     main(net_path)
