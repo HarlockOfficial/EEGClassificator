@@ -1,7 +1,9 @@
+import copy
 import os
 import pickle
 from datetime import datetime
 
+import numpy as np
 import torch
 from braindecode.models import EEGNetv4
 from mne.decoding import CSP
@@ -14,7 +16,7 @@ from sklearn import preprocessing
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.svm import SVC
@@ -119,33 +121,33 @@ def main():
                                         n_times=int(SAMPLE_RATE * SECOND_DURATION))
     lstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
                                             n_times=int(SAMPLE_RATE * SECOND_DURATION))
-    transformermodel_for_pipe = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
-                                            n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
-    transformermodel = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
-                                            n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
-    print("Warning: Overriding Num Layers in TransformerClassifier to 2", flush=True)
+    # transformermodel_for_pipe = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
+    #                                         n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
+    # transformermodel = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
+    #                                         n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
+    # print("Warning: Overriding Num Layers in TransformerClassifier to 2", flush=True)
 
-    mlpnetmodel_for_pipe = NeuralNetTransformer(MLPArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
-                                          n_times=int(SAMPLE_RATE * SECOND_DURATION))
-    mlpnetmodel = NeuralNetTransformer(MLPArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
-                                            n_times=int(SAMPLE_RATE * SECOND_DURATION))
+    # mlpnetmodel_for_pipe = NeuralNetTransformer(MLPArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+    #                                       n_times=int(SAMPLE_RATE * SECOND_DURATION))
+    # mlpnetmodel = NeuralNetTransformer(MLPArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+    #                                         n_times=int(SAMPLE_RATE * SECOND_DURATION))
 
     pipelines = dict()
     pipelines["csp+lda"] = make_pipeline(CSP(n_components=8), LinearDiscriminantAnalysis())
     pipelines["tgsp+svm"] = make_pipeline(Covariances("oas"), TangentSpace(metric="riemann"), SVC(kernel="linear"))
     pipelines["MDM"] = make_pipeline(Covariances("oas"), MDM(metric="riemann"))
-    pipelines["MLPNetPipe"] = Pipeline([('mlp_net', mlpnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
-        ('logistic_regression', LogisticRegression())])
-    pipelines["MLPNet"] = Pipeline([('mlp_net', mlpnetmodel), ('logistic_regression', LogisticRegression())])
+    # pipelines["MLPNetPipe"] = Pipeline([('mlp_net', mlpnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
+    #     ('logistic_regression', LogisticRegression())])
+    # pipelines["MLPNet"] = Pipeline([('mlp_net', mlpnetmodel), ('logistic_regression', LogisticRegression())])
     pipelines["EEGNetV4Pipe"] = Pipeline([('eeg_net', eegnetv4model_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
         ('logistic_regression', LogisticRegression())])
     pipelines["EEGNetV4"] = Pipeline([('eeg_net', eegnetv4model), ('logistic_regression', LogisticRegression())])
     pipelines["LSTMNetPipe"] = Pipeline([('lstm_net', lstmnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
         ('logistic_regression', LogisticRegression())])
     pipelines["LSTMNet"] = Pipeline([('lstm_net', lstmnetmodel), ('logistic_regression', LogisticRegression())])
-    pipelines["TransformerNetPipe"] = Pipeline([('transformer_net', transformermodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
-            ('logistic_regression', LogisticRegression())])
-    pipelines["TransformerNet"] = Pipeline([('transformer_net', transformermodel), ('logistic_regression', LogisticRegression())])
+    # pipelines["TransformerNetPipe"] = Pipeline([('transformer_net', transformermodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
+    #         ('logistic_regression', LogisticRegression())])
+    # pipelines["TransformerNet"] = Pipeline([('transformer_net', transformermodel), ('logistic_regression', LogisticRegression())])
 
     # This commented code was used to determine the suitable dataset, that have been hardcoded in the datasets list
     """
@@ -219,23 +221,50 @@ def main():
         hdf5_path='./models/'+ curr_datetime_to_string + '/',
     )
     """
+    """
+    # hold-out cross-validation
     x, y, tmp = paradigm.get_data(datasets)
     y = EEGClassificator.utils.to_categorical(y)
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, shuffle=False)
+    """
+    # k-fold cross-validation
+    subjects_number = 109
+    dataset_by_subject = []
+    for i in range(1, subjects_number+1):
+        x, y, tmp = paradigm.get_data(datasets, subjects=[i])
+        dataset_by_subject.append((x, y))
+    kfold = KFold(n_splits=subjects_number)
+    for key, value in pipelines.items():
+        pipelines[key] = [copy.deepcopy(value) for _ in range(subjects_number)]
     del paradigm
     del datasets
     del x
     del y
     del tmp
-    for key, pipe in pipelines.items():
+    for key, pipe_lst in pipelines.items():
         print("Fitting Pipeline:", key, flush=True)
-        pipe.fit(x_train, y_train)
-        score = pipe.score(x_test, y_test)
-        print("Scoring Pipeline:", key, "result:", score, flush=True)
-        if not os.path.exists('models/' + curr_datetime_to_string):
-            os.makedirs('models/' + curr_datetime_to_string)
-        with open('models/' + curr_datetime_to_string + '/' + key + '_' + str(score) + '.pkl', 'wb') as f:
-            pickle.dump(pipe, f)
+        pipe_index = 0
+        for train_index, test_index in kfold.split(dataset_by_subject):
+            assert len(test_index.shape) == 1 and test_index.shape[0] == 1
+            train = [dataset_by_subject[idx] for idx in train_index]
+            # add further processing to get x_train, y_train
+            x_train, y_train = train[0]
+            for i in range(1, len(train)):
+                x_train = np.vstack((x_train, train[i][0]))
+                y_train = np.hstack((y_train, train[i][1]))
+            y_train = EEGClassificator.utils.to_categorical(y_train)
+            x_test, y_test = dataset_by_subject[test_index[0]]
+            y_test = EEGClassificator.utils.to_categorical(y_test)
+            pipe = pipe_lst[pipe_index]
+            pipe.fit(x_train, y_train)
+            score = pipe.score(x_test, y_test)
+            print("Scoring Pipeline:", key, "result:", score, "run", pipe_index, "test", test_index[0], flush=True)
+            if not os.path.exists('models/' + curr_datetime_to_string):
+                os.makedirs('models/' + curr_datetime_to_string)
+            with open('models/' + curr_datetime_to_string + '/' + key + '_' + str(test_index[0]) + '_' + str(pipe_index) + '_' + str(score) + '.pkl', 'wb') as f:
+                pickle.dump(pipe, f)
+            pipe_index += 1
+        assert pipe_index == subjects_number
 
     """
     results = evaluation.process(pipelines=pipelines)
