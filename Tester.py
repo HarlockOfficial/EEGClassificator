@@ -25,7 +25,7 @@ def create_confusion_matrix(network, dataset_by_label):
     return confusion_matrix, percentage_confusion_matrix
 
 def compute_confusion_matrix(dataset_by_label, path_to_network):
-    if path_to_network is list:
+    if isinstance(path_to_network, list):
         for file in path_to_network:
             print(f"Recursively running compute confusion matrix for {file}")
             compute_confusion_matrix(dataset_by_label, file)
@@ -41,7 +41,7 @@ def compute_confusion_matrix(dataset_by_label, path_to_network):
         return
     network = VirtualController.load_classificator(path_to_network)
     confusion_matrix, percentage_confusion_matrix = create_confusion_matrix(network, dataset_by_label)
-    print(path_to_network, '\n' , confusion_matrix, '\n', percentage_confusion_matrix)
+    print(path_to_network, '\n' , confusion_matrix, '\n', percentage_confusion_matrix, flush=True)
 
 
 def main(path_to_network):
