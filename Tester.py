@@ -2,6 +2,7 @@
 This will load the dataset and the network and create a confusion matrix
 """
 import os
+import re
 import sys
 
 import numpy as np
@@ -24,30 +25,44 @@ def create_confusion_matrix(network, dataset_by_label):
     percentage_confusion_matrix = confusion_matrix / np.sum(confusion_matrix, axis=1)
     return confusion_matrix, percentage_confusion_matrix
 
-def compute_confusion_matrix(dataset_by_label, path_to_network):
+def compute_confusion_matrix(dataset_list_by_label: list[dict], path_to_network):
     if isinstance(path_to_network, list):
         for file in path_to_network:
             print(f"Recursively running compute confusion matrix for {file}")
-            compute_confusion_matrix(dataset_by_label, file)
+            compute_confusion_matrix(dataset_list_by_label, file)
         return
     elif path_to_network.endswith('/*'):
         # enumerate all files in folder and run main for each file
         for file in os.listdir(path_to_network[:-1]):
             print(f"Recursively running compute confusion matrix for {file}")
-            compute_confusion_matrix(dataset_by_label, path_to_network[:-1] + file)
+            compute_confusion_matrix(dataset_list_by_label, path_to_network[:-1] + file)
         return
     if not path_to_network.endswith('.pkl'):
         print(f"Invalid network file {path_to_network}")
         return
     network = VirtualController.load_classificator(path_to_network)
-    confusion_matrix, percentage_confusion_matrix = create_confusion_matrix(network, dataset_by_label)
+    net_name = os.path.basename(path_to_network)
+    if re.match(r'[a-zA-Z0-9\+]*_[0-9]+_[0-9]+_[0-9]+\.[0-9]+\.pkl', net_name):
+        subject_index = int(re.search(r'_\d+_(\d+)_\d+\.\d+\.pkl', net_name).group(1))
+        confusion_matrix, percentage_confusion_matrix = create_confusion_matrix(network, dataset_list_by_label[subject_index])
+    else:
+        all_subjects_dict = dict()
+        for subject in dataset_list_by_label:
+            for label, dataset in subject.items():
+                if label not in all_subjects_dict.keys():
+                    all_subjects_dict[label] = []
+                all_subjects_dict[label].extend(dataset)
+        confusion_matrix, percentage_confusion_matrix = create_confusion_matrix(network, all_subjects_dict)
     print(path_to_network, '\n' , confusion_matrix, '\n', percentage_confusion_matrix, flush=True)
 
 
 def main(path_to_network):
-    x, y = DatasetAugmentation.utils.load_dataset(PhysionetMI)
-    dataset_by_label = DatasetAugmentation.utils.split_dataset_by_label(x, y)
-    compute_confusion_matrix(dataset_by_label, path_to_network)
+    dataset_list_by_label = []
+    for i in range(1, 110):
+        x, y = DatasetAugmentation.utils.load_dataset(PhysionetMI, subject_id=[i])
+        dataset_by_label = DatasetAugmentation.utils.split_dataset_by_label(x, y)
+        dataset_list_by_label.append(dataset_by_label)
+    compute_confusion_matrix(dataset_list_by_label, path_to_network)
 
 
 
