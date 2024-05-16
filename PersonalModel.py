@@ -21,6 +21,7 @@ from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.svm import SVC
 
+import DatasetAugmentation.utils
 import EEGClassificator.utils
 from EEGClassificator.NetworkArchitectures import TransformerClassifier, LSTMBasedArchitecture, MLPArchitecture
 
@@ -79,7 +80,7 @@ def flatten_batched(X):
 
 
 OUTPUT_CLASSES = 3
-SAMPLE_RATE = 128  # Hz (samples per second)
+SAMPLE_RATE = DatasetAugmentation.utils.SAMPLE_RATE  # Hz (samples per second)
 SECOND_DURATION = 0.5  # seconds
 
 
