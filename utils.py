@@ -6,6 +6,7 @@ def to_categorical(labels: list[str]|str):
         'feet': 0,
         'left_hand': 1,
         'right_hand': 2,
+        'rest': 3
     }
     if isinstance(labels, str):
         return labels_to_numbers[labels]
@@ -16,6 +17,7 @@ def from_categorical(labels: list[int]|int):
         0: 'feet',
         1: 'left_hand',
         2: 'right_hand',
+        3: 'rest'
     }
     if isinstance(labels, int):
         return numbers_to_labels[labels]

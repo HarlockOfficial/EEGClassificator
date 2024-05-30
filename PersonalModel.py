@@ -79,7 +79,7 @@ def flatten_batched(X):
     return X.reshape(X.shape[0], -1)
 
 
-OUTPUT_CLASSES = 3
+OUTPUT_CLASSES = 4
 SAMPLE_RATE = DatasetAugmentation.utils.SAMPLE_RATE  # Hz (samples per second)
 SECOND_DURATION = 0.5  # seconds
 
@@ -111,8 +111,8 @@ def main():
     INPUT_CHANNELS = len(ALL_EEG_CHANNELS)
     print("Using the ", INPUT_CHANNELS, "Channels:", ALL_EEG_CHANNELS)
 
-    paradigm = MotorImagery(channels=ALL_EEG_CHANNELS, events=['left_hand', 'right_hand', 'feet'],
-        n_classes=OUTPUT_CLASSES, fmin=0.5, fmax=40, tmin=0, tmax=SECOND_DURATION, resample=SAMPLE_RATE, )
+    paradigm = MotorImagery(channels=ALL_EEG_CHANNELS, events=['left_hand', 'right_hand', 'feet', 'rest'],
+        n_classes=OUTPUT_CLASSES, fmin=0.5, fmax=40, tmin=0, tmax=SECOND_DURATION, resample=SAMPLE_RATE)
 
     eegnetv4model_for_pipe = NeuralNetTransformer(EEGNetv4, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
                                          n_times=int(SAMPLE_RATE * SECOND_DURATION))
@@ -189,7 +189,7 @@ def main():
     # To fix a library error multi threading was removed in all evaluations,
     # fix was suggested in https://mne.discourse.group/t/valueerror-data-copying-was-not-requested-by-copy-none-but-it-was-required-to-get-to-double-floating-point-precision-cross-val-score/7036/5
     # and seems to solve the problem
-    curr_datetime_to_string = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+    curr_datetime_to_string = datetime.now().strftime("%Y_%m_%d_%H_%M_%S") + '_networks'
     """
     evaluation = WithinSessionEvaluation(paradigm=paradigm, datasets=datasets, overwrite=False,
         suffix='within_session_network_' + curr_datetime_to_string, random_state=42,
