@@ -80,7 +80,6 @@ def flatten_batched(X):
 
 
 OUTPUT_CLASSES = 4
-SAMPLE_RATE = DatasetAugmentation.utils.SAMPLE_RATE  # Hz (samples per second)
 SECOND_DURATION = 0.5  # seconds
 
 
@@ -104,24 +103,19 @@ def main():
     # Intersection of All with Physionet and Weibo
     ALL_EEG_CHANNELS = list(PhysionetChannels.intersection(WeiboChannels))
     """
-    ALL_EEG_CHANNELS = ['FC4', 'P3', 'CP2', 'Fp2', 'Fpz', 'PO4', 'Fp1', 'F3', 'CP3', 'Fz', 'Pz', 'F1', 'AF4', 'CP1',
-                        'PO3', 'Cz', 'FC1', 'F4', 'P1', 'O1', 'F8', 'CP6', 'POz', 'FC5', 'FT8', 'P4', 'T8', 'CP4', 'F6',
-                        'O2', 'C1', 'Oz', 'C2', 'P6', 'C4', 'F2', 'F5', 'PO7', 'C3', 'FC2', 'FC3', 'TP7', 'P5', 'C5',
-                        'T7', 'C6', 'TP8', 'P8', 'FT7', 'CPz', 'AF3', 'FC6', 'P7', 'F7', 'PO8', 'CP5', 'P2', 'FCz']
-    INPUT_CHANNELS = len(ALL_EEG_CHANNELS)
-    print("Using the ", INPUT_CHANNELS, "Channels:", ALL_EEG_CHANNELS)
+    # print("Using the ", DatasetAugmentation.utils.INPUT_CHANNELS, "Channels:", DatasetAugmentation.utils.ALL_EEG_CHANNELS)
 
-    paradigm = MotorImagery(channels=ALL_EEG_CHANNELS, events=['left_hand', 'right_hand', 'feet', 'rest'],
-        n_classes=OUTPUT_CLASSES, fmin=0.5, fmax=40, tmin=0, tmax=SECOND_DURATION, resample=SAMPLE_RATE)
+    paradigm = MotorImagery(channels=DatasetAugmentation.utils.ALL_EEG_CHANNELS, events=['left_hand', 'right_hand', 'feet', 'rest'],
+        n_classes=OUTPUT_CLASSES, fmin=0.5, fmax=40, tmin=0, tmax=SECOND_DURATION, resample=DatasetAugmentation.utils.SAMPLE_RATE)
 
-    eegnetv4model_for_pipe = NeuralNetTransformer(EEGNetv4, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
-                                         n_times=int(SAMPLE_RATE * SECOND_DURATION))
-    eegnetv4model = NeuralNetTransformer(EEGNetv4, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
-                                            n_times=int(SAMPLE_RATE * SECOND_DURATION))
-    lstmnetmodel_for_pipe = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
-                                        n_times=int(SAMPLE_RATE * SECOND_DURATION))
-    lstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
-                                            n_times=int(SAMPLE_RATE * SECOND_DURATION))
+    eegnetv4model_for_pipe = NeuralNetTransformer(EEGNetv4, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+                                         n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
+    eegnetv4model = NeuralNetTransformer(EEGNetv4, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+                                            n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
+    lstmnetmodel_for_pipe = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+                                        n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
+    lstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+                                            n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
     # transformermodel_for_pipe = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
     #                                         n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
     # transformermodel = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
