@@ -71,6 +71,25 @@ class NeuralNetTransformer(TransformerMixin, BaseEstimator):
         out = self.model(X)
         return out.detach().cpu().numpy()
 
+    def score(self, X, y):
+        self.model.eval()
+        t = torch.FloatTensor if self.device == torch.device("cpu") else torch.cuda.FloatTensor
+        X = torch.from_numpy(X).type(t)
+        le = preprocessing.LabelEncoder()
+        targets = le.fit_transform(y.tolist())
+        y = torch.as_tensor(targets, device=self.device, dtype=torch.long)
+        out = self.model(X)
+        loss = self.loss_fn(out, y)
+        return loss.item()
+
+    def predict(self, X):
+        self.model.to(self.device)
+        self.model.eval()
+        t = torch.FloatTensor if self.device == torch.device("cpu") else torch.cuda.FloatTensor
+        X = torch.from_numpy(X).type(t)
+        out = self.model(X)
+        return out.detach().cpu().numpy()
+    
     def getattr__(self, item):
         return getattr(self.model, item)
 
@@ -112,10 +131,17 @@ def main():
                                          n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
     eegnetv4model = NeuralNetTransformer(EEGNetv4, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
                                             n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
+    pureEegnetv4model = NeuralNetTransformer(EEGNetv4, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
+                                         n_outputs=OUTPUT_CLASSES,
+                                         n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
     lstmnetmodel_for_pipe = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
                                         n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
-    lstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
-                                            n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
+    lstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
+                                        n_outputs=OUTPUT_CLASSES,
+                                        n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
+    purelstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
+                                        n_outputs=OUTPUT_CLASSES,
+                                        n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
     # transformermodel_for_pipe = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
     #                                         n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
     # transformermodel = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
@@ -131,18 +157,20 @@ def main():
     pipelines["csp+lda"] = make_pipeline(CSP(n_components=8), LinearDiscriminantAnalysis())
     pipelines["tgsp+svm"] = make_pipeline(Covariances("oas"), TangentSpace(metric="riemann"), SVC(kernel="linear"))
     pipelines["MDM"] = make_pipeline(Covariances("oas"), MDM(metric="riemann"))
-    # pipelines["MLPNetPipe"] = Pipeline([('mlp_net', mlpnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
+    # pipelines["MLPNetPipe"] = Pipeline([('net', mlpnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
     #     ('logistic_regression', LogisticRegression())])
-    # pipelines["MLPNet"] = Pipeline([('mlp_net', mlpnetmodel), ('logistic_regression', LogisticRegression())])
-    pipelines["EEGNetV4Pipe"] = Pipeline([('eeg_net', eegnetv4model_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
+    # pipelines["MLPNet"] = Pipeline([('net', mlpnetmodel), ('logistic_regression', LogisticRegression())])
+    pipelines["EEGNetV4Pipe"] = Pipeline([('net', eegnetv4model_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
         ('logistic_regression', LogisticRegression())])
-    pipelines["EEGNetV4"] = Pipeline([('eeg_net', eegnetv4model), ('logistic_regression', LogisticRegression())])
-    pipelines["LSTMNetPipe"] = Pipeline([('lstm_net', lstmnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
+    pipelines["EEGNetV4"] = Pipeline([('net', eegnetv4model), ('logistic_regression', LogisticRegression())])
+    pipelines["LSTMNetPipe"] = Pipeline([('net', lstmnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
         ('logistic_regression', LogisticRegression())])
-    pipelines["LSTMNet"] = Pipeline([('lstm_net', lstmnetmodel), ('logistic_regression', LogisticRegression())])
-    # pipelines["TransformerNetPipe"] = Pipeline([('transformer_net', transformermodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
+    pipelines["LSTMNet"] = Pipeline([('net', lstmnetmodel), ('logistic_regression', LogisticRegression())])
+    pipelines["PureEEGNetV4"] = pureEegnetv4model
+    pipelines["PureLSTMNet"] = purelstmnetmodel
+    # pipelines["TransformerNetPipe"] = Pipeline([('net', transformermodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
     #         ('logistic_regression', LogisticRegression())])
-    # pipelines["TransformerNet"] = Pipeline([('transformer_net', transformermodel), ('logistic_regression', LogisticRegression())])
+    # pipelines["TransformerNet"] = Pipeline([('net', transformermodel), ('logistic_regression', LogisticRegression())])
 
     # This commented code was used to determine the suitable dataset, that have been hardcoded in the datasets list
     """
@@ -222,6 +250,7 @@ def main():
     y = EEGClassificator.utils.to_categorical(y)
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, shuffle=False)
     """
+    """
     # k-fold cross-validation
     subjects_number = 109
     dataset_by_subject = []
@@ -231,13 +260,32 @@ def main():
     kfold = KFold(n_splits=subjects_number)
     for key, value in pipelines.items():
         pipelines[key] = [copy.deepcopy(value) for _ in range(subjects_number)]
+    """
+    x, y, tmp = paradigm.get_data(datasets)
+    y = EEGClassificator.utils.to_categorical(y)
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, shuffle=True)
     del paradigm
     del datasets
     del x
     del y
     del tmp
-    for key, pipe_lst in pipelines.items():
+    while len(pipelines) > 0:
+        key, pipe = pipelines.popitem()
         print("Fitting Pipeline:", key, flush=True)
+        pipe.fit(x_train, y_train)
+        score = pipe.score(x_test, y_test)
+        print("Scoring Pipeline:", key, "result:", score, flush=True)
+        if not os.path.exists('models/' + curr_datetime_to_string):
+            os.makedirs('models/' + curr_datetime_to_string)
+        with open('models/' + curr_datetime_to_string + '/' + key + '_' + str(score) + '.pkl', 'wb') as f:
+            pickle.dump(pipe, f)
+        if hasattr(pipe, 'named_steps') and 'net' in pipe.named_steps:
+            pipe['net'].model.cpu()
+            del pipe['net'].model
+        del pipe
+    """
+    for key, pipe_lst in pipelines.items():
+        print("Fitting Pipeline:", key, flush=True) 
         pipe_index = 0
         for train_index, test_index in kfold.split(dataset_by_subject):
             assert len(test_index.shape) == 1 and test_index.shape[0] == 1
@@ -250,7 +298,7 @@ def main():
             y_train = EEGClassificator.utils.to_categorical(y_train)
             x_test, y_test = dataset_by_subject[test_index[0]]
             y_test = EEGClassificator.utils.to_categorical(y_test)
-            pipe = pipe_lst[pipe_index]
+            pipe = pipe_lst[0]
             pipe.fit(x_train, y_train)
             score = pipe.score(x_test, y_test)
             print("Scoring Pipeline:", key, "result:", score, "run", pipe_index, "test", test_index[0], flush=True)
@@ -259,8 +307,13 @@ def main():
             with open('models/' + curr_datetime_to_string + '/' + key + '_' + str(test_index[0]) + '_' + str(pipe_index) + '_' + str(score) + '.pkl', 'wb') as f:
                 pickle.dump(pipe, f)
             pipe_index += 1
+            pipe['lstm_net'].model.cpu()
+            del pipe['lstm_net'].model
+            del pipe
+            del pipe_lst[0]
+        del pipelines[key]
         assert pipe_index == subjects_number
-
+        """
     """
     results = evaluation.process(pipelines=pipelines)
     curr_datetime_to_string = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")

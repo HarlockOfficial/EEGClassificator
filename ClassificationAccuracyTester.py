@@ -59,7 +59,7 @@ def compute_confusion_matrix(dataset_list_by_label: list[dict], path_to_network)
 def main(path_to_network):
     dataset_list_by_label = []
     for i in range(1, 110):
-        x, y = DatasetAugmentation.utils.load_dataset(PhysionetMI, subject_id=[i])
+        x, y = DatasetAugmentation.utils.load_dataset(PhysionetMI, subject_id=[i], events=['left_hand', 'right_hand', 'feet', 'rest'])
         dataset_by_label = DatasetAugmentation.utils.split_dataset_by_label(x, y)
         dataset_list_by_label.append(dataset_by_label)
     compute_confusion_matrix(dataset_list_by_label, path_to_network)
