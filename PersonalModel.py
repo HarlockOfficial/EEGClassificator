@@ -49,38 +49,33 @@ class NeuralNetTransformer(TransformerMixin, BaseEstimator):
         t = torch.FloatTensor if self.device == torch.device("cpu") else torch.cuda.FloatTensor
         X = torch.from_numpy(X).type(t)
 
-        le = preprocessing.LabelEncoder()
-        targets = le.fit_transform(y.tolist())
-        y = torch.as_tensor(targets, device=self.device, dtype=torch.long)
+        y = torch.as_tensor(y, device=self.device, dtype=torch.long)
 
         for step in range(self.train_step):
             print(f"Step {step+1} of {self.train_step}", flush=True)
             start_time = datetime.now()
             out = self.model(X)
             loss = self.loss_fn(out, y)
+            accuracy = (out.argmax(dim=1) == y).float().mean()
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-            print(f"Loss: {loss} Run Time: {datetime.now() - start_time}", flush=True)
+            print(f"Loss: {loss} Train Accuracy: {accuracy} Run Time: {datetime.now() - start_time}", flush=True)
         return self
 
     def transform(self, X):
-        self.model.eval()
-        t = torch.FloatTensor if self.device == torch.device("cpu") else torch.cuda.FloatTensor
-        X = torch.from_numpy(X).type(t)
-        out = self.model(X)
-        return out.detach().cpu().numpy()
+        return self.predict(X)
 
     def score(self, X, y):
         self.model.eval()
         t = torch.FloatTensor if self.device == torch.device("cpu") else torch.cuda.FloatTensor
         X = torch.from_numpy(X).type(t)
-        le = preprocessing.LabelEncoder()
-        targets = le.fit_transform(y.tolist())
-        y = torch.as_tensor(targets, device=self.device, dtype=torch.long)
+        y = torch.as_tensor(y, device=self.device, dtype=torch.long)
         out = self.model(X)
         loss = self.loss_fn(out, y)
-        return loss.item()
+        accuracy = (out.argmax(dim=1) == y).float().mean()
+        print(f"Validation Loss: {loss} Validation Accuracy: {accuracy}", flush=True)
+        return accuracy
 
     def predict(self, X):
         self.model.to(self.device)
@@ -262,8 +257,13 @@ def main():
         pipelines[key] = [copy.deepcopy(value) for _ in range(subjects_number)]
     """
     x, y, tmp = paradigm.get_data(datasets)
+    dataset_by_label = DatasetAugmentation.utils.split_dataset_by_label(x, y)
+    downsampled_dataset_by_label = DatasetAugmentation.utils.downsample_dataset_by_label(dataset_by_label, min([len(dataset) for dataset in dataset_by_label.values()]))
+    x, y = DatasetAugmentation.utils.merge_dataset_by_label(downsampled_dataset_by_label)
     y = EEGClassificator.utils.to_categorical(y)
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, shuffle=True)
+    del dataset_by_label
+    del downsampled_dataset_by_label
     del paradigm
     del datasets
     del x
