@@ -1,6 +1,7 @@
 import copy
 import os
 import pickle
+import sys
 from datetime import datetime
 
 import numpy as np
@@ -97,7 +98,7 @@ OUTPUT_CLASSES = 4
 SECOND_DURATION = 0.5  # seconds
 
 
-def main():
+def main(path_to_models=None):
     # The following code was used to determine the suitable channels, that have been hardcoded in the ALL_EEG_CHANNELS list
     # The single dataset channel list was extracted during debugging,
     # and the intersection of both lists was used to determine the suitable channels
@@ -121,52 +122,70 @@ def main():
 
     paradigm = MotorImagery(channels=DatasetAugmentation.utils.ALL_EEG_CHANNELS, events=['left_hand', 'right_hand', 'feet', 'rest'],
         n_classes=OUTPUT_CLASSES, fmin=0.5, fmax=40, tmin=0, tmax=SECOND_DURATION, resample=DatasetAugmentation.utils.SAMPLE_RATE)
-
-    eegnetv4model_for_pipe = NeuralNetTransformer(EEGNetv4, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
-                                         n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
-    eegnetv4model = NeuralNetTransformer(EEGNetv4, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+    if path_to_models is None:
+        eegnetv4model_for_pipe = NeuralNetTransformer(EEGNetv4, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+                                             n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
+        eegnetv4model = NeuralNetTransformer(EEGNetv4, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+                                                n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
+        pureEegnetv4model = NeuralNetTransformer(EEGNetv4, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
+                                             n_outputs=OUTPUT_CLASSES,
+                                             n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
+        lstmnetmodel_for_pipe = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
                                             n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
-    pureEegnetv4model = NeuralNetTransformer(EEGNetv4, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
-                                         n_outputs=OUTPUT_CLASSES,
-                                         n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
-    lstmnetmodel_for_pipe = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
-                                        n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
-    lstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
-                                        n_outputs=OUTPUT_CLASSES,
-                                        n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
-    purelstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
-                                        n_outputs=OUTPUT_CLASSES,
-                                        n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
-    # transformermodel_for_pipe = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
-    #                                         n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
-    # transformermodel = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
-    #                                         n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
-    # print("Warning: Overriding Num Layers in TransformerClassifier to 2", flush=True)
+        lstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
+                                            n_outputs=OUTPUT_CLASSES,
+                                            n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
+        purelstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
+                                            n_outputs=OUTPUT_CLASSES,
+                                            n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
+        # transformermodel_for_pipe = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
+        #                                         n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
+        # transformermodel = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
+        #                                         n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
+        # print("Warning: Overriding Num Layers in TransformerClassifier to 2", flush=True)
 
-    # mlpnetmodel_for_pipe = NeuralNetTransformer(MLPArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
-    #                                       n_times=int(SAMPLE_RATE * SECOND_DURATION))
-    # mlpnetmodel = NeuralNetTransformer(MLPArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
-    #                                         n_times=int(SAMPLE_RATE * SECOND_DURATION))
+        # mlpnetmodel_for_pipe = NeuralNetTransformer(MLPArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+        #                                       n_times=int(SAMPLE_RATE * SECOND_DURATION))
+        # mlpnetmodel = NeuralNetTransformer(MLPArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
+        #                                         n_times=int(SAMPLE_RATE * SECOND_DURATION))
 
-    pipelines = dict()
-    pipelines["csp+lda"] = make_pipeline(CSP(n_components=8), LinearDiscriminantAnalysis())
-    pipelines["tgsp+svm"] = make_pipeline(Covariances("oas"), TangentSpace(metric="riemann"), SVC(kernel="linear"))
-    pipelines["MDM"] = make_pipeline(Covariances("oas"), MDM(metric="riemann"))
-    # pipelines["MLPNetPipe"] = Pipeline([('net', mlpnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
-    #     ('logistic_regression', LogisticRegression())])
-    # pipelines["MLPNet"] = Pipeline([('net', mlpnetmodel), ('logistic_regression', LogisticRegression())])
-    pipelines["EEGNetV4Pipe"] = Pipeline([('net', eegnetv4model_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
-        ('logistic_regression', LogisticRegression())])
-    pipelines["EEGNetV4"] = Pipeline([('net', eegnetv4model), ('logistic_regression', LogisticRegression())])
-    pipelines["LSTMNetPipe"] = Pipeline([('net', lstmnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
-        ('logistic_regression', LogisticRegression())])
-    pipelines["LSTMNet"] = Pipeline([('net', lstmnetmodel), ('logistic_regression', LogisticRegression())])
-    pipelines["PureEEGNetV4"] = pureEegnetv4model
-    pipelines["PureLSTMNet"] = purelstmnetmodel
-    # pipelines["TransformerNetPipe"] = Pipeline([('net', transformermodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
-    #         ('logistic_regression', LogisticRegression())])
-    # pipelines["TransformerNet"] = Pipeline([('net', transformermodel), ('logistic_regression', LogisticRegression())])
-
+        pipelines = dict()
+        pipelines["csp+lda"] = make_pipeline(CSP(n_components=8), LinearDiscriminantAnalysis())
+        pipelines["tgsp+svm"] = make_pipeline(Covariances("oas"), TangentSpace(metric="riemann"), SVC(kernel="linear"))
+        pipelines["MDM"] = make_pipeline(Covariances("oas"), MDM(metric="riemann"))
+        # pipelines["MLPNetPipe"] = Pipeline([('net', mlpnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
+        #     ('logistic_regression', LogisticRegression())])
+        # pipelines["MLPNet"] = Pipeline([('net', mlpnetmodel), ('logistic_regression', LogisticRegression())])
+        pipelines["EEGNetV4Pipe"] = Pipeline([('net', eegnetv4model_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
+            ('logistic_regression', LogisticRegression())])
+        pipelines["EEGNetV4"] = Pipeline([('net', eegnetv4model), ('logistic_regression', LogisticRegression())])
+        pipelines["LSTMNetPipe"] = Pipeline([('net', lstmnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
+            ('logistic_regression', LogisticRegression())])
+        pipelines["LSTMNet"] = Pipeline([('net', lstmnetmodel), ('logistic_regression', LogisticRegression())])
+        pipelines["PureEEGNetV4"] = pureEegnetv4model
+        pipelines["PureLSTMNet"] = purelstmnetmodel
+        # pipelines["TransformerNetPipe"] = Pipeline([('net', transformermodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
+        #         ('logistic_regression', LogisticRegression())])
+        # pipelines["TransformerNet"] = Pipeline([('net', transformermodel), ('logistic_regression', LogisticRegression())])
+    else:
+        print("Loading Models from:", path_to_models, flush=True)
+        if not os.path.exists(path_to_models):
+            raise FileNotFoundError("Path to Models does not exist")
+        if path_to_models.endswith('.pkl'):
+            with open(path_to_models, 'rb') as f:
+                pipelines = pickle.load(f)
+            if not isinstance(pipelines, dict):
+                pipe = pipelines
+                pipelines = dict()
+                pipe_name = path_to_models.split('/')[-1].split('_')[0]
+                pipelines[pipe_name] = pipe
+        else:
+            pipelines = dict()
+            for file in os.listdir(path_to_models):
+                with open(path_to_models + '/' + file, 'rb') as f:
+                    pipe_name = file.split('_')[0]
+                    pipelines[pipe_name] = pickle.load(f)
+        print("Loaded Models:", pipelines.keys(), flush=True)
     # This commented code was used to determine the suitable dataset, that have been hardcoded in the datasets list
     """
     from requests import ReadTimeout
@@ -274,6 +293,8 @@ def main():
         print("Fitting Pipeline:", key, flush=True)
         pipe.fit(x_train, y_train)
         score = pipe.score(x_test, y_test)
+        if hasattr(score, 'item'):
+            score = score.item()
         print("Scoring Pipeline:", key, "result:", score, flush=True)
         if not os.path.exists('models/' + curr_datetime_to_string):
             os.makedirs('models/' + curr_datetime_to_string)
@@ -324,4 +345,5 @@ def main():
     fig.savefig('within_session_network_results' + curr_datetime_to_string + '.png')
     """
 if __name__ == '__main__':
-    main()
+    path_to_models = sys.argv[1] if len(sys.argv) > 1 else None
+    main(path_to_models)
