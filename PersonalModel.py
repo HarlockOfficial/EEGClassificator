@@ -61,7 +61,7 @@ class NeuralNetTransformer(TransformerMixin, BaseEstimator):
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-            print(f"Loss: {loss} Train Accuracy: {accuracy} Run Time: {datetime.now() - start_time}", flush=True)
+            print(f"Loss: {loss} Train Accuracy: {accuracy} Run Time: {datetime.now() - start_time}", flush=((step+1) % 50 == 0))
         return self
 
     def transform(self, X):
@@ -138,10 +138,12 @@ def main(path_to_models=None):
         purelstmnetmodel = NeuralNetTransformer(LSTMBasedArchitecture, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
                                             n_outputs=OUTPUT_CLASSES,
                                             n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION))
-        # transformermodel_for_pipe = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
-        #                                         n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
-        # transformermodel = NeuralNetTransformer(TransformerClassifier, n_chans=INPUT_CHANNELS,
-        #                                         n_outputs=OUTPUT_CLASSES, n_times=int(SAMPLE_RATE * SECOND_DURATION), num_layers=2)
+        transformermodel_for_pipe = NeuralNetTransformer(TransformerClassifier, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
+                                                n_outputs=OUTPUT_CLASSES, n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION), num_layers=4)
+        transformermodel = NeuralNetTransformer(TransformerClassifier, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
+                                                n_outputs=OUTPUT_CLASSES, n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION), num_layers=4)
+        puretransformermodel = NeuralNetTransformer(TransformerClassifier, n_chans=DatasetAugmentation.utils.INPUT_CHANNELS,
+                                                n_outputs=OUTPUT_CLASSES, n_times=int(DatasetAugmentation.utils.SAMPLE_RATE * SECOND_DURATION), num_layers=4)
         # print("Warning: Overriding Num Layers in TransformerClassifier to 2", flush=True)
 
         # mlpnetmodel_for_pipe = NeuralNetTransformer(MLPArchitecture, n_chans=INPUT_CHANNELS, n_outputs=OUTPUT_CLASSES,
@@ -162,13 +164,14 @@ def main(path_to_models=None):
         pipelines["LSTMNetPipe"] = Pipeline([('net', lstmnetmodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
             ('logistic_regression', LogisticRegression())])
         pipelines["LSTMNet"] = Pipeline([('net', lstmnetmodel), ('logistic_regression', LogisticRegression())])
+        pipelines["TransformerNetPipe"] = Pipeline([('net', transformermodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
+                ('logistic_regression', LogisticRegression())])
+        pipelines["TransformerNet"] = Pipeline([('net', transformermodel), ('logistic_regression', LogisticRegression())])
         pipelines["PureEEGNetV4"] = pureEegnetv4model
         pipelines["PureLSTMNet"] = purelstmnetmodel
-        # pipelines["TransformerNetPipe"] = Pipeline([('net', transformermodel_for_pipe), ('flatten', FunctionTransformer(flatten_batched)),
-        #         ('logistic_regression', LogisticRegression())])
-        # pipelines["TransformerNet"] = Pipeline([('net', transformermodel), ('logistic_regression', LogisticRegression())])
+        pipelines["PureTransformerNet"] = puretransformermodel
     else:
-        print("Loading Models from:", path_to_models, flush=True)
+        print("Loading Models from:", path_to_models)
         if not os.path.exists(path_to_models):
             raise FileNotFoundError("Path to Models does not exist")
         if path_to_models.endswith('.pkl'):
@@ -276,13 +279,15 @@ def main(path_to_models=None):
         pipelines[key] = [copy.deepcopy(value) for _ in range(subjects_number)]
     """
     x, y, tmp = paradigm.get_data(datasets)
-    dataset_by_label = DatasetAugmentation.utils.split_dataset_by_label(x, y)
-    downsampled_dataset_by_label = DatasetAugmentation.utils.downsample_dataset_by_label(dataset_by_label, min([len(dataset) for dataset in dataset_by_label.values()]))
-    x, y = DatasetAugmentation.utils.merge_dataset_by_label(downsampled_dataset_by_label)
-    y = EEGClassificator.utils.to_categorical(y)
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, shuffle=True)
-    del dataset_by_label
-    del downsampled_dataset_by_label
+    train_dataset_by_label, test_dataset_by_label = DatasetAugmentation.utils.split_dataset_by_label(x, y, test_size=0.3)
+    downsampled_train_dataset_by_label = DatasetAugmentation.utils.downsample_dataset_by_label(train_dataset_by_label, min([len(dataset) for dataset in train_dataset_by_label.values()]))
+    x_train, y_train = DatasetAugmentation.utils.merge_dataset_by_label(downsampled_train_dataset_by_label)
+    y_train = EEGClassificator.utils.to_categorical(y_train)
+    x_test, y_test = DatasetAugmentation.utils.merge_dataset_by_label(test_dataset_by_label)
+    y_test = EEGClassificator.utils.to_categorical(y_test)
+    del train_dataset_by_label
+    del test_dataset_by_label
+    del downsampled_train_dataset_by_label
     del paradigm
     del datasets
     del x
@@ -295,7 +300,17 @@ def main(path_to_models=None):
         score = pipe.score(x_test, y_test)
         if hasattr(score, 'item'):
             score = score.item()
-        print("Scoring Pipeline:", key, "result:", score, flush=True)
+
+        print("Computing Confusion Matrix for Pipeline:", key)
+        result = pipe.predict(x_test)
+        confusion_matrix = np.zeros((OUTPUT_CLASSES, OUTPUT_CLASSES))
+        for i in range(y_test.shape[0]):
+            confusion_matrix[y_test[i].item(), result[i].argmax()] += 1
+        with open('models/' + curr_datetime_to_string + '/' + key + '_' + str(score) + '_confusion_matrix.pkl',
+                  'wb') as f:
+            pickle.dump(confusion_matrix, f)
+
+        print("Scoring Pipeline:", key, "result:", score, "confusion matrix:", ''.join(str(confusion_matrix).splitlines()))
         if not os.path.exists('models/' + curr_datetime_to_string):
             os.makedirs('models/' + curr_datetime_to_string)
         with open('models/' + curr_datetime_to_string + '/' + key + '_' + str(score) + '.pkl', 'wb') as f:
@@ -344,6 +359,7 @@ def main(path_to_models=None):
     fig, _ = score_plot(results)
     fig.savefig('within_session_network_results' + curr_datetime_to_string + '.png')
     """
+
 if __name__ == '__main__':
     path_to_models = sys.argv[1] if len(sys.argv) > 1 else None
     main(path_to_models)
