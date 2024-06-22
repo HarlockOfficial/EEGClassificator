@@ -306,13 +306,13 @@ def main(path_to_models=None):
         confusion_matrix = np.zeros((OUTPUT_CLASSES, OUTPUT_CLASSES))
         for i in range(y_test.shape[0]):
             confusion_matrix[y_test[i].argmax(), result[i].argmax()] += 1
+        print("Scoring Pipeline:", key, "result:", score, "confusion matrix:", ''.join(str(confusion_matrix).splitlines()))
+
+        if not os.path.exists('models/' + curr_datetime_to_string):
+            os.makedirs('models/' + curr_datetime_to_string)
         with open('models/' + curr_datetime_to_string + '/' + key + '_' + str(score) + '_confusion_matrix.pkl',
                   'wb') as f:
             pickle.dump(confusion_matrix, f)
-
-        print("Scoring Pipeline:", key, "result:", score, "confusion matrix:", ''.join(str(confusion_matrix).splitlines()))
-        if not os.path.exists('models/' + curr_datetime_to_string):
-            os.makedirs('models/' + curr_datetime_to_string)
         with open('models/' + curr_datetime_to_string + '/' + key + '_' + str(score) + '.pkl', 'wb') as f:
             pickle.dump(pipe, f)
         if hasattr(pipe, 'named_steps') and 'net' in pipe.named_steps:
