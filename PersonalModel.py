@@ -50,14 +50,14 @@ class NeuralNetTransformer(TransformerMixin, BaseEstimator):
         t = torch.FloatTensor if self.device == torch.device("cpu") else torch.cuda.FloatTensor
         X = torch.from_numpy(X).type(t)
 
-        y = torch.as_tensor(y, device=self.device, dtype=torch.long)
+        y = torch.as_tensor(y, device=self.device, dtype=torch.float)
 
         for step in range(self.train_step):
             print(f"Step {step+1} of {self.train_step}", flush=True)
             start_time = datetime.now()
             out = self.model(X)
             loss = self.loss_fn(out, y)
-            accuracy = (out.argmax(dim=1) == y).float().mean()
+            accuracy = (out.argmax(dim=1) == y.argmax(dim=1)).float().mean()
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -71,10 +71,10 @@ class NeuralNetTransformer(TransformerMixin, BaseEstimator):
         self.model.eval()
         t = torch.FloatTensor if self.device == torch.device("cpu") else torch.cuda.FloatTensor
         X = torch.from_numpy(X).type(t)
-        y = torch.as_tensor(y, device=self.device, dtype=torch.long)
+        y = torch.as_tensor(y, device=self.device, dtype=torch.float)
         out = self.model(X)
         loss = self.loss_fn(out, y)
-        accuracy = (out.argmax(dim=1) == y).float().mean()
+        accuracy = (out.argmax(dim=1) == y.argmax(dim=1)).float().mean()
         print(f"Validation Loss: {loss} Validation Accuracy: {accuracy}", flush=True)
         return accuracy
 
@@ -282,9 +282,9 @@ def main(path_to_models=None):
     train_dataset_by_label, test_dataset_by_label = DatasetAugmentation.utils.split_dataset_by_label(x, y, test_size=0.3)
     downsampled_train_dataset_by_label = DatasetAugmentation.utils.downsample_dataset_by_label(train_dataset_by_label, min([len(dataset) for dataset in train_dataset_by_label.values()]))
     x_train, y_train = DatasetAugmentation.utils.merge_dataset_by_label(downsampled_train_dataset_by_label)
-    y_train = EEGClassificator.utils.to_categorical(y_train)
+    y_train = EEGClassificator.utils.to_categorical(y_train, np_2d_array=True)
     x_test, y_test = DatasetAugmentation.utils.merge_dataset_by_label(test_dataset_by_label)
-    y_test = EEGClassificator.utils.to_categorical(y_test)
+    y_test = EEGClassificator.utils.to_categorical(y_test, np_2d_array=True)
     del train_dataset_by_label
     del test_dataset_by_label
     del downsampled_train_dataset_by_label
@@ -305,7 +305,7 @@ def main(path_to_models=None):
         result = pipe.predict(x_test)
         confusion_matrix = np.zeros((OUTPUT_CLASSES, OUTPUT_CLASSES))
         for i in range(y_test.shape[0]):
-            confusion_matrix[y_test[i].item(), result[i].argmax()] += 1
+            confusion_matrix[y_test[i].argmax(), result[i].argmax()] += 1
         with open('models/' + curr_datetime_to_string + '/' + key + '_' + str(score) + '_confusion_matrix.pkl',
                   'wb') as f:
             pickle.dump(confusion_matrix, f)

@@ -76,54 +76,6 @@ class LSTMBasedArchitecture(EEGModuleMixin, nn.Sequential):
         x = self.softmax(x)
         return x
 
-
-class TransformerBasedArchitecture(EEGModuleMixin, nn.Module):
-    """
-    DOI: 10.1038/s41598-023-41653-w
-    """
-
-    def __init__(self, n_chans=None, n_outputs=None, n_times=None, chs_info=None, input_window_seconds=None, sfreq=None,
-                 in_chans=None, n_classes=None, input_window_samples=None):
-        n_chans, n_outputs, n_times = deprecated_args(self, ("in_chans", "n_chans", in_chans, n_chans),
-                                                      ("n_classes", "n_outputs", n_classes, n_outputs), (
-                                                      "input_window_samples", "n_times", input_window_samples,
-                                                      n_times), )
-        super().__init__(n_outputs=n_outputs, n_chans=n_chans, chs_info=chs_info, n_times=n_times,
-                         input_window_seconds=input_window_seconds, sfreq=sfreq, )
-        del n_outputs, n_chans, chs_info, n_times, input_window_seconds, sfreq
-        del in_chans, n_classes, input_window_samples
-        """
-        The architecture for transformer is shown in Fig. 3. 
-        The sequential data is encoded at each time stamp provided by $N_e$ electrodes.
-        The input sequence $X \in R^{T_s \times N_e}$ is embedded before passing to the attention layers. 
-        Each $x_i \in R^{1 \times N_e}$, an element of X, is a token which is converted to the vector using 
-        the embedding layer. The positional embedding $P_{Pos\_embedd} \in R^{T_s \times d_{model}}$ of input 
-        data is obtained using a linear layer. The embedded vectors are further positional encoded to form 
-        the embedded input sequence matrix. These matrices consist of spaces where similar vectors are close 
-        to each other and are called embedding spaces, which perform the function of mapping the data. Figure 
-        3 represents the encoder part of the transformer which comprises several layers of the same structure. 
-        Every encoder layer includes multi-head attention and a feed-forward layer along with a hidden layer. 
-        Both layers are followed by a normalization layer and the remnant is also fed to both of the layers. 
-        Four transformer blocks are used in the proposed architecture. The output of the last transformer 
-        encoder block is fed to a neural layer $O_N_c$ which has one neuron for $N_c$ class. This neural 
-        layer is accompanied by the Softmax layer that gives the probability vector for each class.
-        """
-        # Input format should be (batch, self.n_times, self.n_chans)
-        self.reorder_dims = Rearrange("batch channels times -> batch times channels")
-        self.embedding = nn.Embedding(self.n_chans,
-                                      100)  # Todo Apply positional encoding to the result of the embedding
-
-    def forward(self, x):
-        x = self.reorder_dims(x)
-        x = self.embedding(x.long())
-        x = self.positional_embedding(x)
-        x = self.transformer_encoder(x)
-        x = self.output(x)
-        x = self.invert_reorder(x)
-        x = self.softmax(x)
-        return x
-
-
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=6000):
         super(PositionalEncoding, self).__init__()
@@ -137,7 +89,6 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         return x + self.pe[:x.size(0), :]
-
 
 class TransformerEncoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.2):
@@ -197,7 +148,7 @@ class TransformerClassifier(EEGModuleMixin, nn.Module):
         x = self.transformer_encoder(x)
         x = self.classifier(x)  # Average pooling over time steps
         x = F.softmax(x, dim=-1)
-        x = self.invert_reorder(x)
+        # x = self.invert_reorder(x)
         x = x[:, -1, :]
         return x
 
