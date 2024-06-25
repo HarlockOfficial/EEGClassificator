@@ -93,7 +93,6 @@ def main(path_to_network):
 
 
 if __name__ == '__main__':
-    """
     if len(sys.argv) < 2:
         print("Usage: python Tester.py <path to network>")
         sys.exit(1)
@@ -101,6 +100,4 @@ if __name__ == '__main__':
         net_path = sys.argv[1:]
     else:
         net_path = sys.argv[1]
-    """
-    net_path = '../models/2024_03_25_23_21_59/LSTMNet_0.5943600867678959.pkl'
     main(net_path)
