@@ -14,10 +14,10 @@ def create_confusion_matrix(network, gans, sample_count=1000):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     keys_count = len(gans.keys())
     confusion_matrix = np.zeros(shape=(keys_count, keys_count), dtype=int)
-    for label, dataset in gans.items():
+    for label, gan in gans.items():
         true_label = int(label.split('_')[0])
         noise = torch.rand((sample_count, 58, 65)).to(device).to(torch.float32).unsqueeze(1)
-        sample, _ = gans[label](noise)
+        sample, _ = gan(noise)
         sample = sample.detach().cpu().numpy().squeeze(1)
         predictions = network.predict(sample)
         for prediction in predictions:
@@ -27,23 +27,23 @@ def create_confusion_matrix(network, gans, sample_count=1000):
     percentage_confusion_matrix = confusion_matrix / np.sum(confusion_matrix, axis=1)
     return confusion_matrix, percentage_confusion_matrix
 
-def compute_confusion_matrix(gans: dict, path_to_network):
+def compute_confusion_matrix(gans: dict, path_to_network, local_create_confusion_matrix=create_confusion_matrix):
     if isinstance(path_to_network, list):
         for file in path_to_network:
             print(f"Recursively running compute confusion matrix for {file}")
-            compute_confusion_matrix(gans, file)
+            compute_confusion_matrix(gans, file, local_create_confusion_matrix)
         return
     elif path_to_network.endswith('/*'):
         # enumerate all files in folder and run main for each file
         for file in os.listdir(path_to_network[:-1]):
             print(f"Recursively running compute confusion matrix for {file}")
-            compute_confusion_matrix(gans, path_to_network[:-1] + file)
+            compute_confusion_matrix(gans, path_to_network[:-1] + file, local_create_confusion_matrix)
         return
     if not path_to_network.endswith('.pkl'):
         print(f"Invalid network file {path_to_network}")
         return
     network = VirtualController.load_classificator(path_to_network)
-    confusion_matrix, percentage_confusion_matrix = create_confusion_matrix(network, gans)
+    confusion_matrix, percentage_confusion_matrix = local_create_confusion_matrix(network, gans)
     print(path_to_network, '\n' , confusion_matrix, '\n', percentage_confusion_matrix, flush=True)
 
 

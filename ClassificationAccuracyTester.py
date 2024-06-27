@@ -57,23 +57,23 @@ def compute_confusion_matrix_single_subject(dataset_list_by_label: list[dict], p
         confusion_matrix, percentage_confusion_matrix = create_confusion_matrix(network, all_subjects_dict)
     print(path_to_network, '\n' , confusion_matrix, '\n', percentage_confusion_matrix, flush=True)
 
-def compute_confusion_matrix(dataset_by_label: dict, path_to_network):
+def compute_confusion_matrix(dataset_by_label: dict, path_to_network, local_create_confusion_matrix=create_confusion_matrix):
     if isinstance(path_to_network, list):
         for file in path_to_network:
             print(f"Recursively running compute confusion matrix for {file}")
-            compute_confusion_matrix(dataset_by_label, file)
+            compute_confusion_matrix(dataset_by_label, file, local_create_confusion_matrix)
         return
     elif path_to_network.endswith('/*'):
         # enumerate all files in folder and run main for each file
         for file in os.listdir(path_to_network[:-1]):
             print(f"Recursively running compute confusion matrix for {file}")
-            compute_confusion_matrix(dataset_by_label, path_to_network[:-1] + file)
+            compute_confusion_matrix(dataset_by_label, path_to_network[:-1] + file, local_create_confusion_matrix)
         return
     if not path_to_network.endswith('.pkl'):
         print(f"Invalid network file {path_to_network}")
         return
     network = VirtualController.load_classificator(path_to_network)
-    confusion_matrix, percentage_confusion_matrix = create_confusion_matrix(network, dataset_by_label)
+    confusion_matrix, percentage_confusion_matrix = local_create_confusion_matrix(network, dataset_by_label)
     print(path_to_network, '\n' , confusion_matrix, '\n', percentage_confusion_matrix, flush=True)
 
 
